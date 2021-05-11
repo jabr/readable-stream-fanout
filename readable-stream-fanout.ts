@@ -3,7 +3,7 @@ import { deferred, delay } from "https://deno.land/std/async/mod.ts"
 type RSDC = ReadableStreamDefaultController
 type Controllable = ReadableStream & { controller: RSDC }
 
-export class FanoutReadableStream {
+export class ReadableStreamFanout {
     private source: ReadableStream
     private branches: Set<ReadableStream> = new Set
     private backpressure = deferred<void>()
@@ -98,7 +98,7 @@ if (import.meta.main) {
     console.log('main')
     const ts = new TransformStream
     const wr = ts.writable.getWriter()
-    const fo = new FanoutReadableStream(ts.readable)
+    const fo = new ReadableStreamFanout(ts.readable)
     fo.start()
 
     let r1 = fo.add()
