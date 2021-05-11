@@ -1,49 +1,59 @@
-import { deferred, delay } from "https://deno.land/std/async/mod.ts"
+import { Deferred, deferred, delay }
+    from "https://deno.land/std/async/mod.ts"
 
+let managerCount = 0
+type SourceWithBackpressure = { backpressure: Deferred<void> }
 type RSDC = ReadableStreamDefaultController
-type Controllable = ReadableStream & { controller: RSDC }
+class ReadableStreamManager {
+    private source: SourceWithBackpressure
+    public readable: ReadableStream
+    public controller: RSDC = {} as RSDC
+    public cancelled: boolean = false
+    public id: number = managerCount++
+
+    constructor(source: SourceWithBackpressure) {
+        this.source = source
+        this.readable = new ReadableStream(this)
+    }
+
+    start(controller: RSDC): any {
+        this.controller = controller
+    }
+
+    async pull(controller: RSDC) {
+        this.source.backpressure.resolve()
+        console.log('pull attempt on underlying source', this.id)
+    }
+
+    async cancel(reason?: any) {
+        this.cancelled = true
+        console.log('source cancel', this.id, reason)
+    }
+}
 
 export default class ReadableStreamFanout {
     private source: ReadableStream
-    private branches: Set<ReadableStream> = new Set
-    private backpressure = deferred<void>()
+    private branches: Map<ReadableStream, ReadableStreamManager> = new Map
+    public backpressure = deferred<void>()
 
     constructor(source: ReadableStream) {
         this.source = source
     }
 
+    get size(): number { return this.branches.size }
+
     add(): ReadableStream {
-        const fanout = this
-        const underlyingSource = {
-            cancelled: false,
-            controller: {} as RSDC,
-            start(controller: RSDC): any {
-                this.controller = controller
-            },
-            async pull() {
-                fanout.backpressure.resolve()
-                console.log('pull attempt on underlying source')
-            },
-            async cancel(reason?: any) {
-                this.cancelled = true
-                console.log('source cancel', reason)
-            }
-        }
-
-        const stream = new ReadableStream(underlyingSource)
-
-        let controllable = stream as Controllable
-        controllable.controller = underlyingSource.controller
-
-        this.branches.add(stream)
-        return stream
+        const manager = new ReadableStreamManager(this)
+        const readable = manager.readable
+        this.branches.set(readable, manager)
+        return readable
     }
 
-    close(branch: ReadableStream) {
+    close(readable: ReadableStream) {
         console.log('manual branch close')
-        let controllable = branch as Controllable
-        controllable.controller.close()
-        this.branches.delete(branch)
+        let manager = this.branches.get(readable)
+        if (manager) manager.controller.close()
+        this.branches.delete(readable)
     }
 
     async start() {
@@ -51,13 +61,14 @@ export default class ReadableStreamFanout {
             await this.backpressure
             let applyBackpressure = true
 
-            for (const branch of this.branches) {
-                // @todo: how to check that it's closed?
-                if (!branch.locked) {
-                    console.log('skipping enqueue on unlocked branch')
+            for (const [ readable, manager ] of this.branches.entries()) {
+                if (manager.cancelled) {
+                    this.branches.delete(readable)
+                    console.log('removed cancelled branch', manager.id)
                     continue
                 }
-                let controller = (branch as Controllable).controller
+
+                let controller = manager.controller
                 controller.enqueue(chunk)
                 let desiredSize = controller.desiredSize
                 if ((desiredSize || 0) > 0) {
@@ -67,13 +78,6 @@ export default class ReadableStreamFanout {
             }
 
             if (applyBackpressure) this.backpressure = deferred<void>()
-        }
-    }
-
-    dump() {
-        console.log('fanout branches')
-        for (const branch of this.branches) {
-            console.log('branch', branch as Controllable)
         }
     }
 }
@@ -107,18 +111,18 @@ if (import.meta.main) {
     log('r2', r2)
     let r3 = fo.add()
     log('r3', r3, 2)
-    fo.dump()
+    console.log('fanout branches', fo.size)
 
     await wr.write({a: 1})
 
     fo.close(r1)
-    fo.dump()
+    console.log('fanout branches', fo.size)
 
     await wr.write({a: 2})
-    fo.dump()
+    console.log('fanout branches', fo.size)
 
     await wr.write({a: 3})
-    fo.dump()
+    console.log('fanout branches', fo.size)
 
     await delay(2_000)
     await wr.write({a: 4})
