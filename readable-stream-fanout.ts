@@ -3,7 +3,7 @@ import { deferred, delay } from "https://deno.land/std/async/mod.ts"
 type RSDC = ReadableStreamDefaultController
 type Controllable = ReadableStream & { controller: RSDC }
 
-export class ReadableStreamFanout {
+export default class ReadableStreamFanout {
     private source: ReadableStream
     private branches: Set<ReadableStream> = new Set
     private backpressure = deferred<void>()
