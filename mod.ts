@@ -22,12 +22,12 @@ class ReadableStreamManager {
 
     async pull(controller: RSDC) {
         this.source.backpressure.resolve()
-        console.log('pull attempt on underlying source', this.id)
+        // console.log('pull attempt on underlying source', this.id)
     }
 
     async cancel(reason?: any) {
         this.cancelled = true
-        console.log('source cancel', this.id, reason)
+        // console.log('source cancel', this.id, reason)
     }
 }
 
@@ -50,7 +50,7 @@ export default class ReadableStreamFanout {
     }
 
     close(readable: ReadableStream) {
-        console.log('manual branch close')
+        // console.log('manual branch close')
         let manager = this.branches.get(readable)
         if (manager) manager.controller.close()
         this.branches.delete(readable)
@@ -64,7 +64,7 @@ export default class ReadableStreamFanout {
             for (const [ readable, manager ] of this.branches.entries()) {
                 if (manager.cancelled) {
                     this.branches.delete(readable)
-                    console.log('removed cancelled branch', manager.id)
+                    // console.log('removed cancelled branch', manager.id)
                     continue
                 }
 
@@ -73,7 +73,7 @@ export default class ReadableStreamFanout {
                 let desiredSize = controller.desiredSize
                 if ((desiredSize || 0) > 0) {
                     applyBackpressure = false
-                    console.log('branch wants more', desiredSize)
+                    // console.log('branch wants more', desiredSize)
                 }
             }
 

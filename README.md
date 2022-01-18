@@ -4,7 +4,7 @@ A `ReadableStream.tee()` supporting an arbitrary number of branches.
 
 ## Example
 
-```
+```js
 import ReadableStreamFanout from "./mod.ts"
 
 const fanout = new ReadableStreamFanout(readable)
